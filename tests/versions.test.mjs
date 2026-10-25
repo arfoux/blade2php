@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from '../src/index.mjs';
-import { VERSIONS, normalizeVersion, versionFromComposer } from '../src/versions.mjs';
+import { VERSIONS, normalizeVersion, requireVersion, versionFromComposer } from '../src/versions.mjs';
 import { CORPUS } from './oracle/corpus.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -53,6 +53,17 @@ test('version normalisation', () => {
   assert.equal(normalizeVersion('10.50.3'), '10.x');
   assert.equal(normalizeVersion(null), '13.x');
   assert.equal(normalizeVersion('7.0'), '13.x'); // out of range → default
+});
+
+test('an explicitly unsupported major is refused, not silently defaulted', () => {
+  // The compiler's whole premise is "no silently-wrong output"; picking the
+  // 13.x table for a 9.x template would violate it.
+  assert.equal(requireVersion(undefined), '13.x');
+  assert.equal(requireVersion('12'), '12.x');
+  assert.throws(() => requireVersion('9'), /9\.x is not supported/);
+  assert.throws(() => requireVersion('14'), /not supported/);
+  assert.throws(() => requireVersion('banana'), /cannot read a major/);
+  assert.throws(() => compile('{{ $x }}', { laravel: '9' }), /not supported/);
 });
 
 test('versionFromComposer reads a lock file', () => {

@@ -17,11 +17,11 @@
 import { tokenize } from './php.mjs';
 import { BladeCompileError, locate } from './errors.mjs';
 import { stripParentheses } from './directives.mjs';
-import { directivesFor, varsFor, normalizeVersion } from './versions.mjs';
+import { directivesFor, varsFor, requireVersion } from './versions.mjs';
 import { trimChars, endsWith, contains } from './str.mjs';
 import { componentHash } from './xxh128.mjs';
 import { compileComponentTags, createComponentResolver } from './components.mjs';
-import { createRequire } from 'node:module';
+import { discoverComponents } from './discovery.mjs';
 
 const RAW_PLACEHOLDER = '@__raw_block_#__@';
 const rawPlaceholder = (i) => RAW_PLACEHOLDER.replace('#', String(i));
@@ -63,7 +63,7 @@ export class BladeCompiler {
 
     // The directive table is per Laravel major: directives are added between
     // versions and a few change the bytes they emit.
-    this.version = normalizeVersion(options.laravel);
+    this.version = requireVersion(options.laravel);
     this.directives = directivesFor(this.version);
     this.vars = varsFor(this.version);
 
@@ -181,7 +181,7 @@ export class BladeCompiler {
     return compileComponentTags(value, {
       blade: this,
       componentClass: this.componentResolver(),
-      error: (code, message, hint) => this.error(code, message, 0, hint),
+      error: (code, message, hint) => this.error(code, message, 0, this.unresolvedHint(hint)),
     });
   }
 
@@ -198,8 +198,9 @@ export class BladeCompiler {
     if (typeof this.options.componentClass === 'function') {
       this._resolver = this.options.componentClass;
     } else if (this.options.app) {
-      // Lazily required: an app-less build must not pay for the parser.
-      this._resolver = lazyDiscovery(this.options.app);
+      const discovery = discoverComponents(this.options.app);
+      this.discovery = discovery;
+      this._resolver = discovery.componentClass;
     } else {
       this._resolver = createComponentResolver(this.options.components ?? {});
     }
@@ -378,6 +379,20 @@ export class BladeCompiler {
     return this.componentHashStack.pop();
   }
 
+  /**
+   * When the app was scanned and some registration could not be read, say so:
+   * otherwise a BL004 for a component that IS registered looks like a typo.
+   */
+  unresolvedHint(hint) {
+    const unresolved = this.discovery?.unresolved;
+    if (!unresolved?.length) return hint;
+    const where = unresolved
+      .slice(0, 3)
+      .map((u) => `${u.file ? u.file.split(/[\\/]/).pop() : 'app'}: ${u.reason}`)
+      .join('; ');
+    return `${hint} — note: ${unresolved.length} registration(s) could not be read statically (${where})`;
+  }
+
   /** Raise an error at an explicit offset. */
   error(code, message, at, hint = '') {
     const loc = locate(this.source ?? '', typeof at === 'number' ? at : null);
@@ -388,22 +403,6 @@ export class BladeCompiler {
   fail(code, message, hint = '') {
     return this.error(code, message, this.statementOffset ?? null, hint);
   }
-}
-
-/**
- * A resolver backed by `src/discovery.mjs`, loaded on first use so a build that
- * never sees `<x-…>` never imports php-parser.
- */
-function lazyDiscovery(appRoot) {
-  let resolve = null;
-  return (name) => {
-    if (!resolve) {
-      // `discovery.mjs` imports php-parser; require it only when needed.
-      const mod = createRequire(import.meta.url)('../src/discovery.mjs');
-      resolve = mod.discoverComponents(appRoot).componentClass;
-    }
-    return resolve(name);
-  };
 }
 
 /** `Str::trim($value)` on an expression handed to a custom directive. */

@@ -15,3 +15,5 @@ export { tokenize } from './php.mjs';
 export { DIRECTIVES as directives, hasDirective } from './directives.mjs';
 export { xxh3_128, componentHash } from './xxh128.mjs';
 export { setUuidGenerator } from './str.mjs';
+export { discoverComponents } from './discovery.mjs';
+export { VERSIONS, DEFAULT_VERSION, normalizeVersion, requireVersion, versionFromComposer } from './versions.mjs';

@@ -113,37 +113,7 @@ export function explode(separator, subject, limit = null) {
   return [...parts.slice(0, limit - 1), parts.slice(limit - 1).join(sep)];
 }
 
-/**
- * PHP's `preg_replace` with a `$callback` at the same offsets JavaScript's
- * `String.prototype.replace` uses. The wrapper exists so call sites read like
- * the PHP they port, and so the `/u` flag question is answered in one place:
- * Blade patterns are byte-oriented, so we do NOT use `/u`.
- */
-export function pregReplaceCallback(pattern, callback, subject) {
-  const re = pattern instanceof RegExp ? pattern : new RegExp(pattern);
-  return String(subject).replace(re, (...args) => {
-    // JS passes (match, ...groups, offset, string). PHP passes an array of
-    // (match, group1, group2, …, offset, subject). Mirror PHP's shape.
-    const groups = args.slice(0, -2);
-    const offset = args[args.length - 2];
-    const subjectStr = args[args.length - 1];
-    const matches = [...groups, offset, subjectStr];
-    return callback(matches);
-  });
-}
 
-/**
- * `preg_match($pattern, $subject, $matches)` for the first match only.
- * Returns the PHP-shaped `$matches` array (index 0 is the whole match) or null.
- */
-export function pregMatch(pattern, subject) {
-  const re = pattern instanceof RegExp
-    ? new RegExp(pattern.source, pattern.flags.replace('g', ''))
-    : new RegExp(pattern);
-  const m = re.exec(String(subject));
-  if (!m) return null;
-  return [...m];
-}
 
 /**
  * `Str::snake` / `Str::camel` / `Str::studly` — used by the component tag
@@ -169,9 +139,6 @@ export function snake(value, delimiter = '_') {
     .toLowerCase();
 }
 
-export function kebab(value) {
-  return snake(value, '-');
-}
 
 /** `Str::afterLast($subject, $search)`. */
 export function afterLast(subject, search) {

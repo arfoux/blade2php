@@ -1,7 +1,17 @@
 // Cross-check XXH3-128 against @node-rs/xxhash (Rust, matches published xxhsum
 // vectors). Dev-only: installed with --no-save, never a dependency.
-import { xxh3 } from '@node-rs/xxhash';
-import { xxh3_128 } from './src/xxh128.mjs';
+import { xxh3_128 } from '../src/xxh128.mjs';
+
+// Dev-only dependency: `npm i --no-save @node-rs/xxhash`. Skip cleanly rather
+// than fail on a fresh checkout — the pinned vectors in tests/xxh128.test.mjs
+// are the contract; this is the independent cross-check.
+let xxh3;
+try {
+  ({ xxh3 } = await import('@node-rs/xxhash'));
+} catch {
+  console.log('skip: @node-rs/xxhash is not installed (npm i --no-save @node-rs/xxhash)');
+  process.exit(0);
+}
 
 const mine = (buf) => {
   const { high64, low64 } = xxh3_128(buf);

@@ -43,7 +43,22 @@ node tests/oracle/record.mjs --app /path/to/laravel-app   # needs PHP >= 8.3 + v
 node tests/oracle/run.mjs    --app /path/to/laravel-app   # live comparison
 ```
 
-`npm test` needs neither PHP nor an app: it compares against `tests/golden.json`.
+`npm test` needs neither PHP nor an app: it compares against `tests/golden.json`
+and `tests/golden-versions.json`, so CI runs on Node alone.
+
+The oracle scripts need PHP >= 8.3 and a composer install of the framework they
+target:
+
+```bash
+# 10.x / 11.x / 12.x oracles (once)
+for v in 10 11 12; do
+  mkdir -p tests/oracle/versions/l$v && cd tests/oracle/versions/l$v
+  printf '{"require":{"laravel/framework":"^%s.0"},"config":{"allow-plugins":false,"audit":{"block-insecure":false}}}\n' $v > composer.json
+  composer install --no-scripts --no-plugins
+  cd -
+done
+# 13.x uses a real app with vendor/
+```
 
 Beyond the fixed corpus, the compiler is **differentially fuzzed** against the
 real one — random templates built from nested directives, echoes inside
@@ -58,7 +73,9 @@ node tests/oracle/fuzz.mjs --app /path/to/laravel-app --n 400 --seed 11 --compon
 
 ## Coverage
 
-All **125** `compile*` methods of `BladeCompiler` (Laravel 13.x) are ported:
+All **119** Blade directives of `BladeCompiler` (Laravel 13.x) are ported — every
+`compile*` method except the 10 pipeline ones (`compileString`, `compileStatements`,
+`compileEchos` and friends), which are reproduced by the pipeline itself:
 
 - **conditionals** — `@if @elseif @else @endif @unless @isset @auth @guest @env
   @production @switch @case @default @once @checked @selected @disabled
@@ -304,6 +321,11 @@ Three decisions shape the port:
 
 `upstream/` holds the vendored Laravel 13 and xxHash v0.8.2 sources the port was
 written against. They are reference material, not build inputs.
+
+## Status
+
+Version `0.1.0`, `private: true` — not published to npm yet. Remove `private`
+(and pick the scope) when publishing.
 
 ## License
 

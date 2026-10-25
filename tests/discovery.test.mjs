@@ -7,6 +7,9 @@
 // The expectations here are the answers the REAL resolver gave for this fixture
 // (tests/oracle/check-discovery.mjs verifies the same list against PHP).
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -135,4 +138,24 @@ test('a class component wins over an anonymous view of the same name', () => {
 
 test('compile({ app }) still fails loud on an unknown component', () => {
   assert.throws(() => compile('<x-nope />', { app: APP }), (e) => e.code === 'BL004');
+});
+
+test('a BL004 hint names the registrations that could not be read', () => {
+  // A provider that registers with a non-literal argument: the alias exists at
+  // runtime, but no static reader can know it. The refusal must say so, or the
+  // operator will look for a typo that is not there.
+  const { mkdtempSync, writeFileSync, mkdirSync } = require('node:fs');
+  const { tmpdir } = require('node:os');
+  const dir = mkdtempSync(join(tmpdir(), 'blade-unresolved-'));
+  mkdirSync(join(dir, 'app', 'Providers'), { recursive: true });
+  writeFileSync(join(dir, 'composer.json'), JSON.stringify({ autoload: { 'psr-4': { 'App\\': 'app/' } } }));
+  writeFileSync(join(dir, 'app', 'Providers', 'P.php'), `<?php
+namespace App\\Providers;
+use Illuminate\\Support\\Facades\\Blade;
+class P { public function boot(): void { Blade::component($name, Foo::class); } }
+`);
+  assert.throws(
+    () => compile('<x-dynamic />', { app: dir }),
+    (e) => e.code === 'BL004' && /could not be read statically/.test(e.hint),
+  );
 });

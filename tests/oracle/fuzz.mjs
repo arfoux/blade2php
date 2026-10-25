@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from '../../src/index.mjs';
+import { requireVersion } from '../../src/versions.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -25,6 +26,31 @@ const get = (flag, fallback) => {
 };
 const appRoot = get('--app', process.env.LW_APP_ROOT);
 const components = args.includes('--components');
+const laravel = requireVersion(get('--laravel', '13.x'));
+
+// Reject unknown flags: a silently ignored `--laravel 11` would fuzz the wrong
+// version and report a green that means nothing.
+const KNOWN = new Set(['--app', '--n', '--seed', '--components', '--laravel']);
+for (let k = 0; k < args.length; k++) {
+  const a = args[k];
+  if (KNOWN.has(a)) { if (a !== '--components') k++; continue; }
+  console.error(`unknown argument: ${a}`);
+  process.exit(2);
+}
+
+// Which install answers for this major? The version oracles are composer
+// projects with only laravel/framework; 13.x uses the app.
+const ORACLE_DIRS = {
+  '10.x': join(here, 'versions', 'l10'),
+  '11.x': join(here, 'versions', 'l11'),
+  '12.x': join(here, 'versions', 'l12'),
+};
+const oracleDir = laravel === '13.x' ? appRoot : ORACLE_DIRS[laravel];
+if (!oracleDir) { console.error(`no oracle for ${laravel}`); process.exit(2); }
+if (components && laravel !== '13.x') {
+  console.error('--components needs the 13.x app oracle (the standalone installs have no app)');
+  process.exit(2);
+}
 const n = Number(get('--n', 500));
 const seed = Number(get('--seed', 1));
 if (!appRoot) { console.error('usage: node fuzz.mjs --app <app-root> [--n N] [--seed S]'); process.exit(2); }
@@ -125,7 +151,9 @@ for (let i = 0; i < n; i++) {
   sources.set(file, src);
 }
 
-const batchArgs = [join(here, 'batch.php'), appRoot, tmp];
+const batchArgs = laravel === '13.x'
+  ? [join(here, 'batch.php'), appRoot, tmp]
+  : [join(here, 'batch-version.php'), oracleDir, tmp];
 if (components) batchArgs.push('--components');
 const oracleRaw = execFileSync('php', batchArgs, {
   encoding: 'utf8',
@@ -145,7 +173,10 @@ for (const [file, src] of sources) {
   if (!res || !res.ok) { skipped++; continue; }
   let mine;
   try {
-    mine = compile(src, components ? { app: appRoot } : {});
+    mine = compile(src, {
+      laravel,
+      ...(components ? { app: appRoot } : {}),
+    });
   } catch (e) {
     fail++;
     failures.push({ file, src, why: `${e.code ?? e.name}: ${e.message}`, expected: res.compiled, got: null });
@@ -165,5 +196,5 @@ for (const f of failures.slice(0, 5)) {
   console.log('  blade-js:' + JSON.stringify(f.got));
 }
 
-console.log(`\nfuzz: ${pass} passed, ${fail} failed, ${skipped} skipped (n=${n}, seed=${seed})`);
+console.log(`\nfuzz [${laravel}]: ${pass} passed, ${fail} failed, ${skipped} skipped (n=${n}, seed=${seed})`);
 process.exit(fail === 0 ? 0 : 1);

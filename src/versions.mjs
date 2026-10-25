@@ -39,6 +39,31 @@ export function normalizeVersion(value) {
   return `${major}.x`;
 }
 
+/**
+ * `normalizeVersion`, but an EXPLICITLY requested unsupported major is an error.
+ *
+ * Silently compiling a Laravel 9 template with the 13.x table would be the
+ * "silent wrong answer" this project refuses everywhere else: `@props` changed
+ * in 11, so the output would be plausible and wrong.
+ */
+export function requireVersion(value) {
+  if (value == null) return DEFAULT_VERSION;
+  const m = /(\d+)/.exec(String(value));
+  if (!m) {
+    throw new Error(
+      `laravel: cannot read a major from ${JSON.stringify(value)} (expected "10", "11", "12" or "13")`,
+    );
+  }
+  const major = Number(m[1]);
+  if (!VERSIONS.includes(`${major}.x`)) {
+    throw new Error(
+      `laravel: ${major}.x is not supported (supported: ${VERSIONS.join(', ')}). ` +
+      'The directive set differs between majors, so compiling with the wrong table would be silently wrong.',
+    );
+  }
+  return `${major}.x`;
+}
+
 /** The view-data expression passed to make()/first()/renderWhen(). */
 const VARS_BY_VERSION = {
   '10.x': "\\Illuminate\\Support\\Arr::except(get_defined_vars(), ['__data', '__path'])",
