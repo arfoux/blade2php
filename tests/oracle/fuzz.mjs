@@ -48,6 +48,17 @@ const EXPRS = [
   'config("app.name")', 'now()->year', '$x === null',
 ];
 
+// Component tags only exist in the component run: the standalone oracle has no
+// app, so a template with `<x-…>` makes IT throw, not the compiler under test.
+const COMPONENT_LEAVES = [
+  () => '<x-alert />',
+  () => '<x-alert type="danger" />',
+  () => '<x-alert :count="$n" />',
+  () => '<x-alert>body</x-alert>',
+  () => '<x-alert><x-slot:title>T</x-slot:title>body</x-alert>',
+  () => '<x-forms.input name="email" />',
+];
+
 function fragment(depth = 0) {
   const leaf = [
     () => `text ${Math.floor(rand() * 100)}`,
@@ -83,12 +94,6 @@ function fragment(depth = 0) {
     () => `@lang("m.k")`,
     () => `@class(["a" => true])`,
     () => `@checked($x)`,
-    () => '<x-alert />',
-    () => '<x-alert type="danger" />',
-    () => '<x-alert :count="$n" />',
-    () => '<x-alert>body</x-alert>',
-    () => '<x-alert><x-slot:title>T</x-slot:title>body</x-alert>',
-    () => '<x-forms.input name="email" />',
     () => '@@if',
     () => 'mail@example.com',
   ];
@@ -104,7 +109,8 @@ function fragment(depth = 0) {
     ]);
     return `${wrap[0]}\n${inner}\n${wrap[1]}`;
   }
-  return pick(leaf)();
+  const leaves = components ? [...leaf, ...COMPONENT_LEAVES] : leaf;
+  return pick(leaves)();
 }
 
 const tmp = mkdtempSync(join(tmpdir(), 'blade-fuzz-'));
