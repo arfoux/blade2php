@@ -6,7 +6,8 @@
     "test": "node --test tests/*.test.mjs",
     "oracle": "node tests/oracle/run.mjs",
     "record": "node tests/oracle/record.mjs",
-    "crosscheck": "node tests/xxcheck.mjs"
+    "crosscheck": "node tests/xxcheck.mjs",
+    "fuzz": "node tests/oracle/fuzz.mjs"
   },
   "keywords": [
     "blade",

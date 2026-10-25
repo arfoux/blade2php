@@ -17,7 +17,7 @@
 import { tokenize } from './php.mjs';
 import { BladeCompileError, locate } from './errors.mjs';
 import { DIRECTIVES, hasDirective, stripParentheses } from './directives.mjs';
-import { trimChars, after, before, endsWith, contains } from './str.mjs';
+import { trimChars, endsWith, contains } from './str.mjs';
 import { componentHash } from './xxh128.mjs';
 import { compileComponentTags, createComponentResolver } from './components.mjs';
 
@@ -187,48 +187,55 @@ export class BladeCompiler {
   // -------------------------------------------------------------------------
   // step 4b — @statements
   // -------------------------------------------------------------------------
+  /**
+   * Compile the `@…` statements — a SINGLE linear pass.
+   *
+   * The framework walks the string with `substr_replace()` per match, which is
+   * O(n²) on the template length. That is invisible for a view (a few KB) and
+   * fatal for a generated one (a 5 MB template took minutes). This version
+   * emits each gap and each compiled statement into an accumulator, so every
+   * source byte is visited once.
+   *
+   * The merge rule is preserved exactly: when the non-greedy regex stops at a
+   * `)` that does not balance the expression, the match absorbs text up to the
+   * next `)` and repeats. Any match swallowed by that extension is skipped,
+   * which is what the framework's `unset($matches[0][$i + 1])` does.
+   */
   compileStatements(template) {
-    let offset = 0;
-    let working = template;
-    const matches = [...template.matchAll(STATEMENT_PATTERN)];
-    // The framework walks by index while it may MERGE the next match into this
-    // one (a `)` that belongs to the expression). We reproduce that with an
-    // explicit skip set.
-    const skipped = new Set();
+    const src = template;
+    const matches = [...src.matchAll(STATEMENT_PATTERN)];
+    if (matches.length === 0) return src;
 
-    for (let i = 0; i < matches.length; i++) {
-      if (skipped.has(i)) continue;
-      const m = matches[i];
-      const match = [
-        m[0],
-        m[1],
-        m[2] ?? '',
-        m[3] ? m[3] : null,
-        m[3] ? m[3].slice(1, -1) : null,
-      ];
+    let out = '';
+    let cursor = 0;
 
-      // Recover the real closing parenthesis when the non-greedy regex stopped
-      // early: keep appending up to the next `)` until the parentheses balance.
-      while (match[4] != null && endsWith(match[0], ')') && !hasEvenNumberOfParentheses(match[0])) {
-        const afterText = after(working, match[0]);
-        if (afterText === working) break;
-        const rest = before(afterText, ')');
-        if (matches[i + 1] && contains(rest + ')', matches[i + 1][0])) {
-          skipped.add(i + 1);
-          i++;
-        }
-        match[0] = match[0] + rest + ')';
-        match[3] = match[3] + rest + ')';
-        match[4] = match[4] + rest;
+    for (const m of matches) {
+      const start = m.index;
+      if (start < cursor) continue; // consumed by a previous merge
+
+      let text = m[0];
+      const whitespace = m[2] ?? '';
+      let parenthesised = m[3] ?? null;
+      let inner = m[3] ? m[3].slice(1, -1) : null;
+      let end = start + text.length;
+
+      // Keep appending up to the next `)` until the parentheses balance.
+      while (inner != null && endsWith(text, ')') && !hasEvenNumberOfParentheses(text)) {
+        const nextClose = src.indexOf(')', end);
+        if (nextClose === -1) break;
+        const rest = src.slice(end, nextClose);
+        text = text + rest + ')';
+        parenthesised = parenthesised + rest + ')';
+        inner = inner + rest;
+        end = nextClose + 1;
       }
 
-      const compiled = this.compileStatement(match, m.index);
-      const [nextTemplate, nextOffset] = replaceFirstStatement(match[0], compiled, working, offset);
-      working = nextTemplate;
-      offset = nextOffset;
+      out += src.slice(cursor, start);
+      out += this.compileStatement([text, m[1], whitespace, parenthesised, inner], start);
+      cursor = end;
     }
 
-    return working;
+    return out + src.slice(cursor);
   }
 
   compileStatement(match, at = 0) {
@@ -371,17 +378,6 @@ function wrapInEchoHandler(value, handlers) {
   return `$__bladeCompiler->applyEchoHandler(${v})`;
 }
 
-/** `BladeCompiler::replaceFirstStatement()` — replace at/after `offset`. */
-function replaceFirstStatement(search, replace, subject, offset) {
-  if (search === '') return [subject, offset];
-  const position = subject.indexOf(search, offset);
-  if (position === -1) return [subject, 0];
-  return [
-    subject.slice(0, position) + replace + subject.slice(position + search.length),
-    position + replace.length,
-  ];
-}
-
 /**
  * `BladeCompiler::hasEvenNumberOfParentheses()`: a `token_get_all()` count.
  * The PHP implementation returns false when the expression does not parse; we
@@ -400,6 +396,9 @@ function hasEvenNumberOfParentheses(expression) {
   }
   return open === close;
 }
+
+/** `<<<LABEL` / `<<<'LABEL'` / `<<<"LABEL"` — sticky so it costs nothing. */
+const HEREDOC = /<<<[ \t]*(["']?)([A-Za-z_]\w*)\1\r?\n/y;
 
 /** Strip strings/comments so only real code characters remain. */
 function scanParens(code) {
@@ -444,8 +443,9 @@ function scanParens(code) {
     if (ch === '#') { lineComment = true; i++; continue; }
     if (ch === '/' && next === '*') { blockComment = true; i += 2; continue; }
     if (ch === '"' || ch === "'") { quote = ch; i++; continue; }
-    if (ch === '<' && s.startsWith('<<<', i)) {
-      const m = /^<<<[ \t]*(["']?)([A-Za-z_]\w*)\1\r?\n/.exec(s.slice(i));
+    if (ch === '<' && next === '<' && s[i + 2] === '<') {
+      HEREDOC.lastIndex = i;
+      const m = HEREDOC.exec(s);
       if (m) { heredoc = m[2]; i += m[0].length; continue; }
     }
     out += ch;
