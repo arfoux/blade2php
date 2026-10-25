@@ -1,4 +1,4 @@
-# @laravel-workers/blade
+# blade-js
 
 A **Laravel Blade compiler written in JavaScript**. Input: a `.blade.php` template.
 Output: the **exact PHP bytes** `Illuminate\View\Compilers\BladeCompiler` produces.
@@ -6,7 +6,7 @@ Output: the **exact PHP bytes** `Illuminate\View\Compilers\BladeCompiler` produc
 No PHP runtime. No Composer. No `vendor/`. The compiler is the package.
 
 ```js
-import { compile } from '@laravel-workers/blade';
+import { compile } from 'blade-js';
 
 compile('<h1>{{ $title }}</h1>');
 // '<h1><?php echo e($title); ?></h1>'
@@ -14,11 +14,12 @@ compile('<h1>{{ $title }}</h1>');
 
 ## Why
 
-`laravel-workers` compiles a Laravel app to edge JavaScript. Its build used to
-boot the real Laravel app through PHP just to get the Blade compiler's output,
-which meant every build needed a PHP interpreter and a `vendor/` directory.
-This package removes that dependency: the compiler is a pure-JS port of the
-framework's own compiler, verified byte-for-byte.
+Every JavaScript Blade implementation either is a different language (compiles
+to a template DSL) or shells out to PHP. Neither fits a build that must be pure
+JavaScript with a byte-exact contract. This package removes PHP from the loop:
+the compiler is a pure-JS port of `Illuminate\View\Compilers\BladeCompiler`,
+verified byte-for-byte against the real thing. It is a standalone compiler —
+the package does not depend on any runtime, framework, or `laravel-workers`.
 
 ## Fidelity
 
@@ -108,7 +109,7 @@ pages. This one is explicit:
 | `BL004` | a `<x-…>` component that cannot be resolved |
 
 ```js
-import { compile, BladeCompileError } from '@laravel-workers/blade';
+import { compile, BladeCompileError } from 'blade-js';
 
 try {
   compile('@foreach($items)\n@endforeach', { strict: true });
@@ -153,7 +154,7 @@ backslash → class) or `'components.alert'` (no backslash → anonymous view).
 can know:
 
 ```js
-import { createComponentResolver } from '@laravel-workers/blade/components';
+import { createComponentResolver } from 'blade-js/components';
 
 const componentClass = createComponentResolver({
   namespace: 'App\\',
@@ -265,7 +266,7 @@ A registration whose arguments are not literals is **reported**, not guessed —
 it lands in `discoverComponents(app).unresolved`.
 
 ```js
-import { discoverComponents } from '@laravel-workers/blade/discovery';
+import { discoverComponents } from 'blade-js/discovery';
 const app = discoverComponents('/path/to/laravel-app');
 app.componentClass('alert');            // { class, params, file }
 app.componentClass('forms.input');      // { class, … } or { view: 'components.forms.input' }

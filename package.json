@@ -1,7 +1,7 @@
 {
-  "name": "@laravel-workers/blade",
+  "name": "blade-js",
   "version": "0.1.0",
-  "description": "Laravel Blade compiler in pure JavaScript: .blade.php -> the exact PHP bytes Illuminate\\View\\Compilers\\BladeCompiler produces. No PHP runtime, no Composer.",
+  "description": "Laravel's Blade compiler in pure JavaScript: .blade.php -> the exact PHP bytes Illuminate\\View\\Compilers\\BladeCompiler produces. No PHP runtime, no Composer.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "oracle": "node tests/oracle/run.mjs",
@@ -19,12 +19,12 @@
     "template",
     "php",
     "edge",
-    "workers"
+    "workers",
+    "ssr"
   ],
   "author": "",
   "license": "MIT",
   "type": "module",
-  "private": true,
   "exports": {
     ".": "./src/index.mjs",
     "./components": "./src/components.mjs",
@@ -43,5 +43,12 @@
   ],
   "dependencies": {
     "php-parser": "3.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arfoux/blade-js.git"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

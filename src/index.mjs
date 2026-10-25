@@ -1,6 +1,6 @@
 // src/index.mjs — the public surface.
 //
-//   import { compile } from '@laravel-workers/blade';
+//   import { compile } from 'blade-js';
 //   const php = compile(bladeSource, { path: 'welcome.blade.php' });
 //
 // `compile()` answers the same PHP bytes as
