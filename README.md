@@ -32,6 +32,8 @@ suite pins it:
 | `tests/errors.test.mjs` | the refusal surface |
 | `tests/php.test.mjs` | the `token_get_all` split (what is and is not compiled) |
 | `tests/xxh128.test.mjs` | `hash('xxh128')`, which Blade embeds in variable names |
+| `tests/versions.test.mjs` | every corpus template at Laravel 10, 11, 12 and 13 |
+| `tests/discovery.test.mjs` | static `<x-…>` resolution without a resolver |
 | `tests/perf.test.mjs` | compilation is linear in template size |
 
 The golden file was recorded by running the **real** Blade compiler:
@@ -166,6 +168,8 @@ framework's `compileString()`.
 | `path` | `null` | used in error messages only |
 | `strict` | `false` | unknown directives throw `BL001` |
 | `componentTags` | `true` | compile `<x-…>` tags |
+| `laravel` | `'13.x'` | the major whose directive set and bytes to emit |
+| `app` | — | a Laravel app root; enables static component discovery |
 | `componentClass` | — | `(name) => string \| {class, params} \| {view} \| null` |
 | `components` | `{}` | options for the default resolver |
 | `customDirective` | — | `(name, expression) => string \| null` (`Blade::directive`) |
@@ -183,16 +187,87 @@ The `token_get_all` split the compiler is built on: `[{ kind: 'inline' | 'php', 
 Only `inline` tokens are compiled — which is why `{{ }}` inside `<?php ?>` is
 not an echo.
 
+## Laravel versions
+
+The directive set moves between majors, and a few directives change the bytes
+they emit. Both are handled: pass the major and the compiler answers exactly what
+that major's `BladeCompiler` does.
+
+```js
+compile(src, { laravel: '10' });   // or '11', '12', '13' (default)
+```
+
+| | 10.x | 11.x | 12.x | 13.x |
+|---|---|---|---|---|
+| view-data filter | `Arr::except(…)` | `array_diff_key(…)` | same | same |
+| `@props` | `onlyProps`/`exceptProps` | `extractPropNames` | +`unset($__key, $__value)` | same |
+| `@use` | basic | basic | `function`/`const`, group imports | same |
+| `@pushIf` comma handling | limit 2 | limit 2 | split-all | split-all |
+| `@elsePushIf` comma handling | limit 2 | limit 2 | limit 2 | split-all |
+| `@bool` | — | ✓ | ✓ | ✓ |
+| `@hasStack` `@context` `@includeIsolated` | — | — | ✓ | ✓ |
+| `@fonts` | — | — | — | ✓ |
+
+A directive the version does not have is **absent**, so `@fonts` in a Laravel 12
+template compiles to literal text — which is what Laravel 12 does.
+
+The delta was derived by diffing `Illuminate\View\Compilers\Concerns\*` across
+the four majors (vendored in `upstream/versions/`), then verified against real
+installs:
+
+```bash
+node tests/oracle/run-versions.mjs --app13 /path/to/app
+# 10.x (10.50.3): 147 passed   11.x (11.57.0): 147 passed
+# 12.x (12.70.1): 147 passed   13.x (13.38.0): 147 passed
+```
+
+`versionFromComposer(composerLock)` reads the major from a lock file, so a build
+can pick it up without asking.
+
+## Components, with no resolver
+
+`ComponentTagCompiler::componentClass()` needs `class_exists()`, the view finder
+and the provider registrations. All three are readable from files, so point the
+compiler at the app and it resolves them itself:
+
+```js
+compile('<x-alert type="danger" />', { app: '/path/to/laravel-app' });
+```
+
+That reads:
+
+| What PHP does | What the compiler reads |
+|---|---|
+| `class_exists('App\\View\\Components\\Alert')` | `app/View/Components/Alert.php` via PSR-4 from `composer.json` |
+| the class's constructor parameters | the `__construct` AST (for the data/attribute split) |
+| `$viewFactory->exists('components.alert')` | `resources/views/components/alert.blade.php` |
+| `Blade::component('a', A::class)` | the literal call in a provider's `boot()` |
+| `Blade::componentNamespace('Ns', 'p')` | the same |
+
+A registration whose arguments are not literals is **reported**, not guessed —
+it lands in `discoverComponents(app).unresolved`.
+
+```js
+import { discoverComponents } from '@laravel-workers/blade/discovery';
+const app = discoverComponents('/path/to/laravel-app');
+app.componentClass('alert');            // { class, params, file }
+app.componentClass('forms.input');      // { class, … } or { view: 'components.forms.input' }
+app.componentClass('missing');          // null  (Laravel throws here)
+```
+
+Verified against the real resolver:
+
+```bash
+node tests/oracle/check-discovery.mjs --app /path/to/app
+# discovery: 13 passed, 0 failed
+```
+
 ## Known limits
 
 These are deliberate, not oversights:
 
-- **Laravel 13.x only.** The directive set moves between majors (`@props`/`@aware`
-  are 9+, `@context` is 11+, `@fonts` is 13+). Compiling a Laravel 10 template
-  with this compiler is not supported; the 125-method surface is 13.x's.
-- **Components need a resolver.** `class_exists()` has no JS equivalent, so
-  `<x-alert>` requires `componentClass` (or `createComponentResolver` with a
-  real `viewExists`). Unresolvable → `BL004`, like Laravel's own throw.
+- **Laravel 10–13.** Older majors are not targeted; the vendored sources in
+  `upstream/versions/` show exactly what would need adding.
 - **No renderer.** Output is PHP. Rendering is the runtime's job.
 - **`@verbatim` is matched non-greedily**, exactly like Laravel: a literal
   `@endverbatim` inside a verbatim block ends it, in both compilers.

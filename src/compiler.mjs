@@ -16,10 +16,12 @@
 
 import { tokenize } from './php.mjs';
 import { BladeCompileError, locate } from './errors.mjs';
-import { DIRECTIVES, hasDirective, stripParentheses } from './directives.mjs';
+import { stripParentheses } from './directives.mjs';
+import { directivesFor, varsFor, normalizeVersion } from './versions.mjs';
 import { trimChars, endsWith, contains } from './str.mjs';
 import { componentHash } from './xxh128.mjs';
 import { compileComponentTags, createComponentResolver } from './components.mjs';
+import { createRequire } from 'node:module';
 
 const RAW_PLACEHOLDER = '@__raw_block_#__@';
 const rawPlaceholder = (i) => RAW_PLACEHOLDER.replace('#', String(i));
@@ -58,6 +60,12 @@ export class BladeCompiler {
     this.escapedTags = options.escapedTags ?? ['{{{', '}}}'];
     this.echoFormat = options.echoFormat ?? 'e(%s)';
     this.componentTags = options.componentTags !== false;
+
+    // The directive table is per Laravel major: directives are added between
+    // versions and a few change the bytes they emit.
+    this.version = normalizeVersion(options.laravel);
+    this.directives = directivesFor(this.version);
+    this.vars = varsFor(this.version);
 
     this.reset();
   }
@@ -172,9 +180,30 @@ export class BladeCompiler {
     if (!value.includes('<x-') && !value.includes('<x:')) return value;
     return compileComponentTags(value, {
       blade: this,
-      componentClass: this.options.componentClass ?? createComponentResolver(this.options.components ?? {}),
+      componentClass: this.componentResolver(),
       error: (code, message, hint) => this.error(code, message, 0, hint),
     });
+  }
+
+  /**
+   * The component resolver, in priority order:
+   *   1. an explicit `componentClass` (the caller knows best)
+   *   2. `app: '<laravel-app-root>'` → static discovery from the app's files
+   *   3. `components: {…}` → the documented option bag
+   *   4. nothing → every `<x-…>` fails loud with BL004
+   */
+  componentResolver() {
+    if (this._resolver) return this._resolver;
+
+    if (typeof this.options.componentClass === 'function') {
+      this._resolver = this.options.componentClass;
+    } else if (this.options.app) {
+      // Lazily required: an app-less build must not pay for the parser.
+      this._resolver = lazyDiscovery(this.options.app);
+    } else {
+      this._resolver = createComponentResolver(this.options.components ?? {});
+    }
+    return this._resolver;
   }
 
   // -------------------------------------------------------------------------
@@ -268,7 +297,7 @@ export class BladeCompiler {
       }
     }
 
-    if (!hasDirective(name)) {
+    if (!this.directives.has(name.toLowerCase())) {
       // Laravel's compiler leaves an unknown `@foo` untouched (compileStatement's
       // final `return $match[0]`), so parity means passing it through: a stray
       // `@endslothi` from a `<x-slot>` closing tag is legitimate literal text.
@@ -281,7 +310,7 @@ export class BladeCompiler {
       return match[0];
     }
 
-    const fn = DIRECTIVES.get(name.toLowerCase());
+    const fn = this.directives.get(name.toLowerCase());
     const out = String(fn(expression, this) ?? '');
     return expression != null ? out : out + match[2];
   }
@@ -359,6 +388,22 @@ export class BladeCompiler {
   fail(code, message, hint = '') {
     return this.error(code, message, this.statementOffset ?? null, hint);
   }
+}
+
+/**
+ * A resolver backed by `src/discovery.mjs`, loaded on first use so a build that
+ * never sees `<x-…>` never imports php-parser.
+ */
+function lazyDiscovery(appRoot) {
+  let resolve = null;
+  return (name) => {
+    if (!resolve) {
+      // `discovery.mjs` imports php-parser; require it only when needed.
+      const mod = createRequire(import.meta.url)('../src/discovery.mjs');
+      resolve = mod.discoverComponents(appRoot).componentClass;
+    }
+    return resolve(name);
+  };
 }
 
 /** `Str::trim($value)` on an expression handed to a custom directive. */

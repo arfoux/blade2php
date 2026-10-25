@@ -1,0 +1,1 @@
+{"require":{"laravel/framework":"^11.0"},"config":{"allow-plugins":false,"audit":{"block-insecure":false}}}

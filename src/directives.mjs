@@ -140,6 +140,11 @@ function pushIfParts(expression) {
   }
   return parts;
 }
+
+/** Laravel <= 11 split with a limit of 2: a comma in the condition broke it. */
+export function pushIfPartsLegacy(expression) {
+  return explode(',', stripParentheses(expression), 2);
+}
 export const pushif = (e) => {
   const [cond, stack] = pushIfParts(e);
   return `<?php if(${cond}): $__env->startPush(${stack}); ?>`;
@@ -205,17 +210,22 @@ export const endwhile = () => '<?php endwhile; ?>';
 // ---------------------------------------------------------------------------
 // CompilesLayouts
 // ---------------------------------------------------------------------------
+// The view-data filter changed in Laravel 11: 10.x passes Arr::except(), 11+
+// passes array_diff_key(). The bytes differ, so the version selects the variant.
+const VARS_10 = "\\Illuminate\\Support\\Arr::except(get_defined_vars(), ['__data', '__path'])";
+const VARS_11 = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
+
 export function extends_(expression, ctx) {
   const exp = stripParentheses(expression);
   ctx.footer.push(
-    `<?php echo $__env->make(${exp}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>`
+    `<?php echo $__env->make(${exp}, ${ctx.vars})->render(); ?>`
   );
   return '';
 }
 export function extendsfirst(expression, ctx) {
   const exp = stripParentheses(expression);
   ctx.footer.push(
-    `<?php echo $__env->first(${exp}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>`
+    `<?php echo $__env->first(${exp}, ${ctx.vars})->render(); ?>`
   );
   return '';
 }
@@ -265,28 +275,26 @@ export const endprependonce = () => '<?php $__env->stopPrepend(); endif; ?>';
 // ---------------------------------------------------------------------------
 // CompilesIncludes
 // ---------------------------------------------------------------------------
-const VARS = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
-
 export const each = (e) => `<?php echo $__env->renderEach${e}; ?>`;
-export function include_(e) {
+export function include_(e, ctx) {
   const exp = stripParentheses(e);
-  return `<?php echo $__env->make(${exp}, ${VARS})->render(); ?>`;
+  return `<?php echo $__env->make(${exp}, ${ctx.vars})->render(); ?>`;
 }
-export function includeif(e) {
+export function includeif(e, ctx) {
   const exp = stripParentheses(e);
-  return `<?php if ($__env->exists(${exp})) echo $__env->make(${exp}, ${VARS})->render(); ?>`;
+  return `<?php if ($__env->exists(${exp})) echo $__env->make(${exp}, ${ctx.vars})->render(); ?>`;
 }
-export function includewhen(e) {
+export function includewhen(e, ctx) {
   const exp = stripParentheses(e);
-  return `<?php echo $__env->renderWhen(${exp}, ${VARS}); ?>`;
+  return `<?php echo $__env->renderWhen(${exp}, ${ctx.vars}); ?>`;
 }
-export function includeunless(e) {
+export function includeunless(e, ctx) {
   const exp = stripParentheses(e);
-  return `<?php echo $__env->renderUnless(${exp}, ${VARS}); ?>`;
+  return `<?php echo $__env->renderUnless(${exp}, ${ctx.vars}); ?>`;
 }
-export function includefirst(e) {
+export function includefirst(e, ctx) {
   const exp = stripParentheses(e);
-  return `<?php echo $__env->first(${exp}, ${VARS})->render(); ?>`;
+  return `<?php echo $__env->first(${exp}, ${ctx.vars})->render(); ?>`;
 }
 export function includeisolated(e) {
   const exp = stripParentheses(e);
@@ -375,6 +383,13 @@ export function inject(expression) {
 // ---------------------------------------------------------------------------
 // CompilesUseStatements
 // ---------------------------------------------------------------------------
+export function use_legacy(expression) {
+  const segments = explode(',', String(expression).replace(/[()]/g, ''));
+  const u = trimChars(segments[0], " '\"").replace(/^\\+/, '');
+  const as = segments[1] != null ? ` as ${trimChars(segments[1], " '\"")}` : '';
+  return `<?php use \\${u}${as}; ?>`;
+}
+
 export function use(expression, ctx) {
   let e = trimChars(str(expression).replace(/[()]/g, ''), " '\"");
 
@@ -459,16 +474,21 @@ export const component = (expression, ctx) => {
       ? `${bare}:${trimChars(alias, "'\"")}`
       : bare;
     const hash = ctx.newComponentHash(hashInput);
-    return compileClassComponentOpening(bare, alias, data, hash);
+    return compileClassComponentOpening(bare, alias, data, hash, ctx.version);
   }
   return `<?php $__env->startComponent${expression}; ?>`;
 };
 
-export function compileClassComponentOpening(component, alias, data, hash) {
+export function compileClassComponentOpening(component, alias, data, hash, version = '13.x') {
+  // Laravel 10 cast the attribute bag with `(array) $attributes->getIterator()`;
+  // 11+ uses `$attributes->all()`. The bytes differ, so the version selects it.
+  const attrs = version === '10.x'
+    ? '(array) $attributes->getIterator()'
+    : '$attributes->all()';
   return [
     `<?php if (isset($component)) { $__componentOriginal${hash} = $component; } ?>`,
     `<?php if (isset($attributes)) { $__attributesOriginal${hash} = $attributes; } ?>`,
-    `<?php $component = ${component}::resolve(${data || '[]'} + (isset($attributes) && $attributes instanceof Illuminate\\View\\ComponentAttributeBag ? $attributes->all() : [])); ?>`,
+    `<?php $component = ${component}::resolve(${data || '[]'} + (isset($attributes) && $attributes instanceof Illuminate\\View\\ComponentAttributeBag ? ${attrs} : [])); ?>`,
     `<?php $component->withName(${alias}); ?>`,
     `<?php if ($component->shouldRender()): ?>`,
     `<?php $__env->startComponent($component->resolveView(), $component->data()); ?>`,
@@ -496,6 +516,50 @@ export const slot = (e) => `<?php $__env->slot${e}; ?>`;
 export const endslot = () => '<?php $__env->endSlot(); ?>';
 export const componentfirst = (e) => `<?php $__env->startComponentFirst${e}; ?>`;
 export const endcomponentfirst = () => endcomponent();
+
+export const props10 = (expression) => `<?php $attributes ??= new \\Illuminate\\View\\ComponentAttributeBag; ?>
+<?php foreach($attributes->onlyProps${expression} as $__key => $__value) {
+    $$__key = $$__key ?? $__value;
+} ?>
+<?php $attributes = $attributes->exceptProps${expression}; ?>
+<?php foreach (array_filter(${expression}, 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
+    $$__key = $$__key ?? $__value;
+} ?>
+<?php $__defined_vars = get_defined_vars(); ?>
+<?php foreach ($attributes as $__key => $__value) {
+    if (array_key_exists($__key, $__defined_vars)) unset($$__key);
+} ?>
+<?php unset($__defined_vars); ?>`;
+
+export const props11 = (expression) => `<?php $attributes ??= new \\Illuminate\\View\\ComponentAttributeBag;
+
+$__newAttributes = [];
+$__propNames = \\Illuminate\\View\\ComponentAttributeBag::extractPropNames(${expression});
+
+foreach ($attributes->all() as $__key => $__value) {
+    if (in_array($__key, $__propNames)) {
+        $$__key = $$__key ?? $__value;
+    } else {
+        $__newAttributes[$__key] = $__value;
+    }
+}
+
+$attributes = new \\Illuminate\\View\\ComponentAttributeBag($__newAttributes);
+
+unset($__propNames);
+unset($__newAttributes);
+
+foreach (array_filter(${expression}, 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
+    $$__key = $$__key ?? $__value;
+}
+
+$__defined_vars = get_defined_vars();
+
+foreach ($attributes->all() as $__key => $__value) {
+    if (array_key_exists($__key, $__defined_vars)) unset($$__key);
+}
+
+unset($__defined_vars); ?>`;
 
 export const props = (expression) => `<?php $attributes ??= new \\Illuminate\\View\\ComponentAttributeBag;
 

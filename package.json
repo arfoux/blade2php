@@ -7,7 +7,10 @@
     "oracle": "node tests/oracle/run.mjs",
     "record": "node tests/oracle/record.mjs",
     "crosscheck": "node tests/xxcheck.mjs",
-    "fuzz": "node tests/oracle/fuzz.mjs"
+    "fuzz": "node tests/oracle/fuzz.mjs",
+    "oracle:versions": "node tests/oracle/run-versions.mjs",
+    "oracle:discovery": "node tests/oracle/check-discovery.mjs",
+    "record:versions": "node tests/oracle/record-versions.mjs"
   },
   "keywords": [
     "blade",
@@ -25,6 +28,8 @@
   "exports": {
     ".": "./src/index.mjs",
     "./components": "./src/components.mjs",
+    "./discovery": "./src/discovery.mjs",
+    "./versions": "./src/versions.mjs",
     "./package.json": "./package.json"
   },
   "engines": {
@@ -36,5 +41,7 @@
     "README.md",
     "LICENSE"
   ],
-  "dependencies": {}
+  "dependencies": {
+    "php-parser": "3.7.0"
+  }
 }

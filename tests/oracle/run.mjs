@@ -65,16 +65,9 @@ for (const entry of CORPUS) {
 
   let mine;
   try {
-    mine = compile(entry.src, {
-      componentClass: (name) => {
-        // The oracle app's component map, kept in sync with the fixture.
-        const map = {
-          alert: { class: 'App\\View\\Components\\Alert', params: ['type', 'count', 'disabled'] },
-          'forms.input': { view: 'components.forms.input' },
-        };
-        return map[name] ?? null;
-      },
-    });
+    // Component resolution comes from the app itself (static discovery), the
+    // same way a real build does it — no hand-maintained map to drift.
+    mine = compile(entry.src, entry.components ? { app: appRoot } : {});
   } catch (e) {
     // An unknown directive is a DELIBERATE refusal (Laravel passes it through).
     if (entry.unknown && e.code === 'BL001') { pass++; continue; }

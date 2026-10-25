@@ -42,12 +42,6 @@ const rand = rng(seed);
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 const chance = (p) => rand() < p;
 
-// The fixture components installed by tests/oracle/fixtures/install.mjs.
-const componentClass = (name) => ({
-  alert: { class: 'App\\View\\Components\\Alert', params: ['type', 'count', 'disabled'] },
-  'forms.input': { view: 'components.forms.input' },
-}[name] ?? null);
-
 const EXPRS = [
   '$x', '$a + $b', '$user->name', 'count($items)', '$a ?? "d"',
   "'lit'", '"dq"', '1 + 2', '$m["k"]', 'route("home")', '$a ? "y" : "n"',
@@ -145,7 +139,7 @@ for (const [file, src] of sources) {
   if (!res || !res.ok) { skipped++; continue; }
   let mine;
   try {
-    mine = compile(src, components ? { componentClass: componentClass } : {});
+    mine = compile(src, components ? { app: appRoot } : {});
   } catch (e) {
     fail++;
     failures.push({ file, src, why: `${e.code ?? e.name}: ${e.message}`, expected: res.compiled, got: null });

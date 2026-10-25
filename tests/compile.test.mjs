@@ -20,11 +20,9 @@ const golden = JSON.parse(readFileSync(join(here, 'golden.json'), 'utf8'));
 const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/g;
 const normalize = (s) => String(s).replace(uuid, '<UUID>');
 
-// The component fixtures the oracle app carries (tests/oracle/fixtures/).
-const componentClass = (name) => ({
-  alert: { class: 'App\\View\\Components\\Alert', params: ['type', 'count', 'disabled'] },
-  'forms.input': { view: 'components.forms.input' },
-}[name] ?? null);
+// Component resolution comes from the fixture app's own files
+// (tests/fixtures/app), i.e. the same static discovery a real build uses.
+const APP = join(here, 'fixtures', 'app');
 
 const byId = new Map(CORPUS.map((c) => [c.id, c]));
 
@@ -32,7 +30,7 @@ for (const [id, expected] of Object.entries(golden.cases)) {
   test(`golden: ${id}`, () => {
     const entry = byId.get(id);
     assert.ok(entry, `corpus entry ${id} is missing`);
-    const actual = compile(entry.src, { componentClass });
+    const actual = compile(entry.src, entry.components ? { app: APP } : {});
     assert.equal(normalize(actual), normalize(expected));
   });
 }

@@ -1,2 +1,4 @@
 node_modules/
 tests/oracle/tmp/
+tests/oracle/versions/*/vendor/
+tests/oracle/versions/*/composer.lock
