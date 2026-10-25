@@ -18,7 +18,13 @@ import { compile } from '../../src/index.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const appIndex = args.indexOf('--app');
-const appRoot = appIndex >= 0 ? args[appIndex + 1] : process.env.LW_APP_ROOT;
+let appRoot = appIndex >= 0 ? args[appIndex + 1] : process.env.LW_APP_ROOT;
+// Git Bash / MSYS pass `/c/Users/...` style paths to native Node on Windows,
+// and PHP's `is_file`/`require` reject them - convert to the Windows form the
+// underlying tools expect (a no-op on POSIX and for already-Windows paths).
+if (process.platform === 'win32') {
+  appRoot = String(appRoot).replace(/^\/([a-z])\//i, (_, d) => `${d.toUpperCase()}:\\`);
+}
 const onlyIndex = args.indexOf('--only');
 const only = onlyIndex >= 0 ? args[onlyIndex + 1] : null;
 const verbose = args.includes('--verbose');
