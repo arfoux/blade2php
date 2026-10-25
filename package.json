@@ -1,0 +1,39 @@
+{
+  "name": "@laravel-workers/blade",
+  "version": "0.1.0",
+  "description": "Laravel Blade compiler in pure JavaScript: .blade.php -> the exact PHP bytes Illuminate\\View\\Compilers\\BladeCompiler produces. No PHP runtime, no Composer.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "oracle": "node tests/oracle/run.mjs",
+    "record": "node tests/oracle/record.mjs",
+    "crosscheck": "node tests/xxcheck.mjs"
+  },
+  "keywords": [
+    "blade",
+    "laravel",
+    "compiler",
+    "template",
+    "php",
+    "edge",
+    "workers"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.mjs",
+    "./components": "./src/components.mjs",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./src/index.mjs",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {}
+}
