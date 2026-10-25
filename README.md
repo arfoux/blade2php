@@ -27,7 +27,7 @@ suite pins it:
 
 | Suite | What it proves |
 |---|---|
-| `tests/compile.test.mjs` | 102 templates compile to the exact bytes Laravel 13.38.0 / PHP 8.3.30 produced |
+| `tests/compile.test.mjs` | 154 templates compile to the exact bytes Laravel 13.38.0 / PHP 8.3.30 produced |
 | `tests/components.test.mjs` | the `<x-…>` attribute pipeline, step by step |
 | `tests/errors.test.mjs` | the refusal surface |
 | `tests/php.test.mjs` | the `token_get_all` split (what is and is not compiled) |
@@ -170,6 +170,22 @@ framework's `compileString()`.
 The `token_get_all` split the compiler is built on: `[{ kind: 'inline' | 'php', text }]`.
 Only `inline` tokens are compiled — which is why `{{ }}` inside `<?php ?>` is
 not an echo.
+
+## Known limits
+
+These are deliberate, not oversights:
+
+- **Laravel 13.x only.** The directive set moves between majors (`@props`/`@aware`
+  are 9+, `@context` is 11+, `@fonts` is 13+). Compiling a Laravel 10 template
+  with this compiler is not supported; the 125-method surface is 13.x's.
+- **Components need a resolver.** `class_exists()` has no JS equivalent, so
+  `<x-alert>` requires `componentClass` (or `createComponentResolver` with a
+  real `viewExists`). Unresolvable → `BL004`, like Laravel's own throw.
+- **No renderer.** Output is PHP. Rendering is the runtime's job.
+- **`@verbatim` is matched non-greedily**, exactly like Laravel: a literal
+  `@endverbatim` inside a verbatim block ends it, in both compilers.
+- **No performance work.** Compilation is a linear scan plus the framework's own
+  passes; huge templates are untested, but the algorithm is the framework's.
 
 ## What this is not
 

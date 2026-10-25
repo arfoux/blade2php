@@ -124,6 +124,81 @@ export const CORPUS = [
   { id: 'component-slot', src: '<x-alert><x-slot:title>T</x-slot:title>hi</x-alert>', components: true },
   { id: 'component-anonymous', src: '<x-forms.input name="email" />', components: true },
 
+
+  // ---- authorizations ---------------------------------------------------
+  { id: 'can', src: '@can("update", $post)\nyes\n@endcan' },
+  { id: 'cannot', src: '@cannot("update", $post)\nno\n@endcannot' },
+  { id: 'canany', src: '@canany(["update", "delete"], $post)\nyes\n@endcanany' },
+  { id: 'elsecan', src: '@can("update", $post)\na\n@elsecan("delete", $post)\nb\n@endcan' },
+  { id: 'elsecannot', src: '@cannot("update", $post)\na\n@elsecannot("delete", $post)\nb\n@endcannot' },
+  { id: 'elsecanany', src: '@canany(["a"], $p)\na\n@elsecanany(["b"], $p)\nb\n@endcanany' },
+  { id: 'elseguest', src: '@guest\nout\n@elseguest\nin\n@endguest' },
+
+  // ---- pushIf family ----------------------------------------------------
+  { id: 'elsepushif', src: '@pushIf($a, "s")\nx\n@elsePushIf($b, "s")\ny\n@endPushIf' },
+  { id: 'elsepush', src: '@pushIf($a, "s")\nx\n@elsePush("s")\ny\n@endPushIf' },
+  { id: 'endpushif', src: '@pushIf($a, "s")\nx\n@endPushIf' },
+
+  // ---- empty ------------------------------------------------------------
+  { id: 'empty-conditional', src: '@empty($a)\nnone\n@endempty' },
+
+  // ---- prepend once -----------------------------------------------------
+  { id: 'prependonce', src: '@prependOnce("scripts", "id")\nx\n@endPrependOnce' },
+
+  // ---- include isolated -------------------------------------------------
+  { id: 'includeisolated', src: '@includeIsolated("partials.x", ["a" => 1])' },
+
+  // ---- fragments --------------------------------------------------------
+  { id: 'fragment', src: '@fragment("name")\nx\n@endfragment' },
+
+  // ---- contexts ---------------------------------------------------------
+  { id: 'context', src: '@context("user")\n{{ $value }}\n@endcontext' },
+
+  // ---- fonts ------------------------------------------------------------
+  { id: 'fonts', src: '@fonts' },
+  { id: 'fonts-args', src: '@fonts("Inter")' },
+
+  // ---- component directives (no app needed) -----------------------------
+  { id: 'component-directive', src: "@component('components.alert')\nx\n@endcomponent" },
+  { id: 'component-class', src: '@component(App\\View\\Components\\Alert::class)\nx\n@endcomponent' },
+  { id: 'component-data', src: "@component('components.alert', 'alert', ['type' => 'danger'])\nx\n@endcomponent" },
+  { id: 'slot-directive', src: '@slot("title")\nT\n@endslot' },
+  { id: 'componentfirst-directive', src: "@componentFirst(['a', 'b'])\nx\n@endComponentFirst" },
+  { id: 'props', src: "@props(['type' => 'info', 'count' => 0])" },
+  { id: 'aware', src: "@aware(['color'])" },
+
+
+  // ---- adversarial: places a regex-based port silently diverges ----------
+  { id: 'adv-paren-in-string', src: "@if($a == ')')\nyes\n@endif" },
+  { id: 'adv-nested-parens', src: '@foreach(collect([1, 2]) as $x)\n{{ $x }}\n@endforeach' },
+  { id: 'adv-directive-in-attr', src: '<div class="@if($a) x @endif">' },
+  { id: 'adv-echo-braces-in-string', src: "{{ '}}' }}" },
+  { id: 'adv-null-coalesce', src: "{{ $a ?? 'x' }}" },
+  { id: 'adv-json-comma-in-string', src: '@json(["a" => "x,y"])' },
+  { id: 'adv-nested-sections', src: "@section('a')\n@section('b')\nx\n@endsection\n@endsection" },
+  { id: 'adv-comment-with-directive', src: '{{-- @if($a) --}}' },
+  { id: 'adv-triple-at', src: '@@@if' },
+  { id: 'adv-no-space-if', src: '@if($x)@endif' },
+  { id: 'adv-multiline-if', src: '@if(\n  $a\n)\nyes\n@endif' },
+  { id: 'adv-email-not-directive', src: 'mail me at foo@example.com' },
+  { id: 'adv-at-word-start', src: 'a @if($x) b @endif c' },
+  { id: 'adv-php-close-in-string', src: "@php\necho '?>';\n@endphp" },
+  { id: 'adv-verbatim-with-echo', src: '@verbatim\n{{ x }}\n@endverbatim' },
+  { id: 'adv-once-twice', src: '@once\na\n@endonce\n@once\nb\n@endonce' },
+  { id: 'adv-switch-string', src: "@switch($x)\n@case('a')\nA\n@break\n@endswitch" },
+  { id: 'adv-foreach-arrow', src: '@foreach($items as $k => $v)\n{{ $k }}\n@endforeach' },
+  { id: 'adv-echo-method-chain', src: '{{ $user->posts()->where("a", 1)->count() }}' },
+  { id: 'adv-if-inside-script', src: '<script>@if($a) var x = 1; @endif</script>' },
+  { id: 'adv-escaped-endif', src: '@if($a)\nx\n@@endif' },
+  { id: 'adv-section-inline-and-block', src: "@section('a', 'inline')\n@section('b')\nx\n@endsection" },
+  { id: 'adv-many-echoes-one-line', src: '{{ $a }}{{ $b }}{{ $c }}' },
+  { id: 'adv-directive-after-newline', src: '@if($a)\n@endif' },
+
+  { id: 'adv-two-verbatims', src: '@verbatim\na\n@endverbatim b @verbatim\nc\n@endverbatim' },
+  { id: 'adv-empty-verbatim', src: '@verbatim@endverbatim' },
+  { id: 'adv-unclosed-php', src: '@php $x = 1;' },
+  { id: 'adv-php-then-endphp-text', src: '@php\n$x = 1;\n@endphp' },
+
   // ---- escapes / edge cases ---------------------------------------------
   { id: 'escaped-directive', src: '@@if and text' },
   { id: 'unknown-directive-passthrough', src: '@notADirective' },
