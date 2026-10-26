@@ -65,7 +65,7 @@ for (const [version, dir] of Object.entries(ORACLES)) {
       try {
         compile(e.src, { laravel: version });
         fail++;
-        failures.push({ version, id: e.id, why: 'Laravel threw but blade-js compiled', expected: res.error, got: '(compiled)' });
+        failures.push({ version, id: e.id, why: 'Laravel threw but blade2js compiled', expected: res.error, got: '(compiled)' });
       } catch { pass++; }
       continue;
     }
@@ -74,7 +74,7 @@ for (const [version, dir] of Object.entries(ORACLES)) {
       mine = compile(e.src, { laravel: version });
     } catch (err) {
       fail++;
-      failures.push({ version, id: e.id, why: `blade-js threw: ${err.code ?? err.name}`, expected: res.compiled, got: null });
+      failures.push({ version, id: e.id, why: `blade2js threw: ${err.code ?? err.name}`, expected: res.compiled, got: null });
       continue;
     }
     if (norm(res.compiled) === norm(mine)) pass++;
@@ -98,7 +98,7 @@ rmSync(tmp, { recursive: true, force: true });
 for (const f of failures.slice(0, verbose ? 40 : 8)) {
   console.log(`\nFAIL [${f.version}] ${f.id} — ${f.why}`);
   console.log('  laravel:  ' + JSON.stringify(f.expected));
-  console.log('  blade-js: ' + JSON.stringify(f.got));
+  console.log('  blade2js: ' + JSON.stringify(f.got));
 }
 
 console.log(`\nTOTAL ${totalPass} passed, ${totalFail} failed`);
