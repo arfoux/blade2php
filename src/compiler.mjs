@@ -52,6 +52,9 @@ export class BladeCompiler {
    *        resolves `<x-alert>` to a class FQCN or an anonymous view name.
    *        Without it, class components cannot be resolved (BL004).
    * @param {{vite?: {fonts: string, invoke: string}}} [options.context]
+   * @param {string} [options.installed] exact framework version ('11.34.2'), read
+   *        from composer.lock — refines the major table where Laravel changed
+   *        bytes mid-major (the v11.43.0 view-data switch).
    */
   constructor(options = {}) {
     this.options = options;
@@ -62,10 +65,12 @@ export class BladeCompiler {
     this.componentTags = options.componentTags !== false;
 
     // The directive table is per Laravel major: directives are added between
-    // versions and a few change the bytes they emit.
+    // versions and a few change the bytes they emit. `installed` (the exact
+    // framework version from composer.lock) refines that table where Laravel
+    // changed bytes WITHIN a major (verified: view-data filter in v11.43.0).
     this.version = requireVersion(options.laravel);
     this.directives = directivesFor(this.version);
-    this.vars = varsFor(this.version);
+    this.vars = varsFor(this.version, options.installed ?? null);
 
     this.reset();
   }

@@ -262,11 +262,16 @@ export function compileComponentTags(value, ctx) {
 }
 
 function compileSlots(value, ctx) {
-  const pattern = /<\s*x[-:]slot(?::([\w-]+))?(?:\s+name=(?:"[^"]+"|'[^']+'|[^\s>]+))?(?:\s+:name=(?:"[^"]+"|'[^']+'|[^\s>]+))?((?:\s+[\s\S]*?)?)(?<![\/=\-])>/g;
+  // The name= / :name= attribute used to sit in NON-capturing groups, so
+  // nameMatch/boundMatch (read from the leftover attrs) never matched and
+  // `<x-slot name="logo">` compiled as slot('slot') — while real Laravel emits
+  // slot('logo') (byte-proven against Laravel 11.34 + Breeze's auth views).
+  // The attributes now capture into their own groups.
+  const pattern = /<\s*x[-:]slot(?::([\w-]+))?(\s+name=(?:"[^"]+"|'[^']+'|[^\s>]+))?(\s+:name=(?:"[^"]+"|'[^']+'|[^\s>]+))?((?:\s+[\s\S]*?)?)(?<![\/=\-])>/g;
 
-  let out = value.replace(pattern, (full, inlineName, attrs) => {
-    const nameMatch = /\s+name=("([^"]+)"|'([^']+)'|([^\s>]+))/.exec(attrs || '');
-    const boundMatch = /\s+:name=("([^"]+)"|'([^']+)'|([^\s>]+))/.exec(attrs || '');
+  let out = value.replace(pattern, (full, inlineName, nameAttr, boundAttr, attrs) => {
+    const nameMatch = nameAttr ? /\s+name=("([^"]+)"|'([^']+)'|([^\s>]+))/.exec(nameAttr) : null;
+    const boundMatch = boundAttr ? /\s+:name=("([^"]+)"|'([^']+)'|([^\s>]+))/.exec(boundAttr) : null;
 
     let name = stripQuotes(inlineName || (nameMatch && (nameMatch[2] ?? nameMatch[3] ?? nameMatch[4])) || (boundMatch && (boundMatch[2] ?? boundMatch[3] ?? boundMatch[4])) || '') || "'slot'";
 
@@ -295,12 +300,55 @@ function stripSlotMeta(attrs) {
 }
 
 function compileSelfClosingTags(value, ctx) {
-  const pattern = /<\s*x[-:]([\w\-:.]+)((?:\s+[\s\S]*?)?)\s*\/>/g;
-  return value.replace(pattern, (_full, name, attrs) => {
+  // A lazy candidate can run past a NON-self-closing tag
+  // (`<x-textarea>…</x-textarea>`) to the first `/>` later in the file and
+  // swallow everything between as "attributes" — measured on a real Laravel
+  // 11.34 app, the data bag gained tokens and a class from three lines below
+  // the tag. So: take the candidate, REJECT it when the region holds a bare
+  // `>` (quoted values may contain one — `class="<?php …(["a" => true]); ?>"`
+  // does, and Laravel emits exactly that), and resume one char past the `<` so
+  // a genuine self-closing tag inside the rejected region is still found.
+  const candidate = /<\s*x[-:]([\w\-:.]+)((?:\s+[\s\S]*?)?)\s*\/>/g;
+  // The region is a tag tail only up to a `>` that would TERMINATE the tag:
+  // depth 0, outside quotes, not the `>` of `=>`, and not inside `(...)`/`[...]`
+  // (a directive like `@class(["a" => true])` carries both brackets and arrows
+  // and is a legal attribute position; `rows="8">{{ … }}` ends the tag).
+  const hasTagTerminator = (s) => {
+    let quote = null;
+    let depth = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (quote) {
+        if (c === '\\') i++;
+        else if (c === quote) quote = null;
+        continue;
+      }
+      if (c === '"' || c === "'") { quote = c; continue; }
+      if (c === '(' || c === '[') { depth++; continue; }
+      if (c === ')' || c === ']') { if (depth > 0) depth--; continue; }
+      if (c === '>' && depth === 0 && s[i - 1] !== '=') return true;
+    }
+    return false;
+  };
+  let out = '';
+  let cursor = 0;
+  for (;;) {
+    candidate.lastIndex = cursor;
+    const m = candidate.exec(value);
+    if (!m) break;
+    const attrs = m[2] || '';
+    if (hasTagTerminator(attrs)) {
+      out += value.slice(cursor, m.index + 1);
+      cursor = m.index + 1;
+      continue;
+    }
     const boundAttributes = {};
-    const attributes = getAttributesFromAttributeString(ctx.blade, attrs || '', boundAttributes);
-    return componentString(name, attributes, boundAttributes, ctx) + '\n@endComponentClass##END-COMPONENT-CLASS##';
-  });
+    const attributes = getAttributesFromAttributeString(ctx.blade, attrs, boundAttributes);
+    out += value.slice(cursor, m.index);
+    out += componentString(m[1], attributes, boundAttributes, ctx) + '\n@endComponentClass##END-COMPONENT-CLASS##';
+    cursor = m.index + m[0].length;
+  }
+  return out + value.slice(cursor);
 }
 
 function compileOpeningTags(value, ctx) {

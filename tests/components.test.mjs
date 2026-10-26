@@ -130,3 +130,45 @@ test('component tags are not compiled when disabled', () => {
   const out = compile('<x-alert />', { componentTags: false });
   assert.equal(out, '<x-alert />');
 });
+
+test("the name attribute keeps the slot's name (slot('logo'), not slot('slot'))", () => {
+  // Found by laravel-workers' byte-compare against a REAL Laravel 11.34 app
+  // (Breeze auth views): `<x-slot name="logo">` compiled as slot('slot'),
+  // because the name= group of the regex was non-capturing and never reached
+  // nameMatch. Laravel's bytes: $__env->slot('logo', null, []).
+  const opts = { componentClass: () => ({ class: 'App\\View\\Components\\A', params: [] }) };
+  const out = compile('<x-a><x-slot name="logo">X</x-slot></x-a>', opts);
+  assert.match(out, /\$__env->slot\('logo', null, \[\]\)/);
+  assert.doesNotMatch(out, /\$__env->slot\('slot'/);
+
+  // The shorthand form already worked and must keep working.
+  const short = compile('<x-a><x-slot:heading>X</x-slot:heading></x-a>', opts);
+  assert.match(short, /\$__env->slot\('heading', null, \[\]\)/);
+
+  // A default slot (no name) still falls back to 'slot'.
+  const plain = compile('<x-a>plain</x-a>', opts);
+  assert.doesNotMatch(plain, /\$__env->slot\(/);
+});
+
+test('a non-self-closing component tag never swallows content as attributes', () => {
+  // Real-app shape (Laravel 11.34 + Breeze-style views): the self-closing
+  // pattern used a lazy `[\s\S]*?` with no `>` guard, so `<x-textarea>…</x-textarea>`
+  // matched any LATER `/>` in the file and turned every line in between — a
+  // body expression, a closing tag, a following @error/span — into attributes
+  // (data gained `old`, `body`, `@error`, `span => true` and a class from
+  // three lines below).
+  const opts = { componentClass: () => ({ view: 'components.textarea' }) };
+  const src =
+    '<x-textarea id="body" class="block mt-1 w-full" rows="8">{{ old(\'body\') }}</x-textarea>\n' +
+    "        @error('body') <span class=\"text-red-500\">{{ $message }}</span> @enderror\n" +
+    '        <x-markdown-editor :draft_id="$draft" />\n';
+  const out = compile(src, opts);
+  assert.match(out, /'class' => 'block mt-1 w-full'/);
+  assert.doesNotMatch(out, /'text-red-500'/, 'the span three lines down must not become an attribute');
+  assert.doesNotMatch(out, /'@error'\s*=>\s*true/, 'a following directive must not become an attribute');
+  assert.match(out, /echo e\(old\('body'\)\)/, 'the body expression survives');
+  // The genuinely self-closing tag afterwards still compiles (the stub
+  // resolver answers the same view for both components, so the name is the
+  // stable signal).
+  assert.match(out, /withName\('markdown-editor'\)/);
+});

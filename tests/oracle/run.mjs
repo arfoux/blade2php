@@ -8,12 +8,13 @@
 // proof that the port is byte-faithful, not a runtime dependency.
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CORPUS } from './corpus.mjs';
 import { compile } from '../../src/index.mjs';
+import { versionFromComposer, installedVersionFromComposer } from '../../src/versions.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -33,6 +34,18 @@ if (!appRoot) {
   console.error('usage: node tests/oracle/run.mjs --app <laravel-app-root> [--only <id>] [--verbose]');
   process.exit(2);
 }
+
+// The oracle compares against THIS app's BladeCompiler, so compile with THIS
+// app's Laravel major — the same thing the build passes (composer's require).
+// Without it every non-13 app is compiled as 13.x and the byte diff reports
+// false failures (measured: 14 false failures on a Laravel 11.34 app).
+let appMajor = process.env.LW_LARAVEL || null;
+let appInstalled = null;
+try {
+  const composerObj = JSON.parse(readFileSync(join(appRoot, 'composer.lock'), 'utf8'));
+  appInstalled = installedVersionFromComposer(composerObj);
+  if (!appMajor) appMajor = versionFromComposer(composerObj);
+} catch { /* no lock: fall back to the default major below */ }
 
 const tmp = mkdtempSync(join(tmpdir(), 'blade-oracle-'));
 const uuidRe = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/g;
@@ -73,7 +86,11 @@ for (const entry of CORPUS) {
   try {
     // Component resolution comes from the app itself (static discovery), the
     // same way a real build does it — no hand-maintained map to drift.
-    mine = compile(entry.src, entry.components ? { app: appRoot } : {});
+    mine = compile(entry.src, {
+      ...(entry.components ? { app: appRoot } : {}),
+      ...(appMajor ? { laravel: appMajor } : {}),
+      ...(appInstalled ? { installed: appInstalled } : {}),
+    });
   } catch (e) {
     // An unknown directive is a DELIBERATE refusal (Laravel passes it through).
     if (entry.unknown && e.code === 'BL001') { pass++; continue; }
@@ -98,5 +115,5 @@ for (const f of failures) {
   console.log('  blade2php: ' + JSON.stringify(f.got));
 }
 
-console.log(`\n${pass} passed, ${fail} failed, ${skip} skipped (Laravel version: ${process.env.LW_LARAVEL ?? 'see oracle'})`);
+console.log(`\n${pass} passed, ${fail} failed, ${skip} skipped (compiled as Laravel ${appMajor ?? 'unknown'}, oracle = this app's own compiler)`);
 process.exit(fail === 0 ? 0 : 1);

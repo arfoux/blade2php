@@ -110,3 +110,22 @@ test('@context / @includeIsolated exist only from 12.x', () => {
   assert.equal(compile('@includeIsolated("p")', { laravel: '11' }), '@includeIsolated("p")');
   assert.match(compile('@includeIsolated("p")', { laravel: '12' }), /\$__env->make\("p"\)->render\(\)/);
 });
+
+test('installed version refines 11.x: the view-data filter switched at v11.43.0', () => {
+  // Verified against the tags themselves: v11.42.0 compiles Arr::except(),
+  // v11.43.0 compiles array_diff_key(). Without the exact version from
+  // composer.lock every app pinned below 11.43 gets the wrong bytes on
+  // extends + the whole include family (measured: 8 byte failures on a real
+  // Laravel 11.34.2 project).
+  const before = compile('@include("p")', { laravel: '11', installed: '11.34.2' });
+  const atSwitch = compile('@include("p")', { laravel: '11', installed: '11.43.0' });
+  const withoutInfo = compile('@include("p")', { laravel: '11' });
+  assert.match(before, /Arr::except\(get_defined_vars\(\), \['__data', '__path'\]\)/);
+  assert.match(atSwitch, /array_diff_key\(get_defined_vars\(\), \['__data' => 1, '__path' => 1\]\)/);
+  assert.equal(atSwitch, withoutInfo); // no exact version -> the major default stands
+  assert.match(compile('@extends("layout")', { laravel: '11', installed: '11.42.0' }), /Arr::except/);
+  assert.match(compile('@extends("layout")', { laravel: '11', installed: '11.43.0' }), /array_diff_key/);
+  // 10.x and 12.x are unaffected by the switch.
+  assert.match(compile('@include("p")', { laravel: '10', installed: '10.50.3' }), /Arr::except/);
+  assert.match(compile('@include("p")', { laravel: '12', installed: '12.0.0' }), /array_diff_key/);
+});

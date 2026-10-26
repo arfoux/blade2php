@@ -65,11 +65,13 @@ export function requireVersion(value) {
 }
 
 /** The view-data expression passed to make()/first()/renderWhen(). */
+const VARS_ARR_EXCEPT = "\\Illuminate\\Support\\Arr::except(get_defined_vars(), ['__data', '__path'])";
+const VARS_ARRAY_DIFF = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
 const VARS_BY_VERSION = {
-  '10.x': "\\Illuminate\\Support\\Arr::except(get_defined_vars(), ['__data', '__path'])",
-  '11.x': "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])",
-  '12.x': "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])",
-  '13.x': "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])",
+  '10.x': VARS_ARR_EXCEPT,
+  '11.x': VARS_ARRAY_DIFF,
+  '12.x': VARS_ARRAY_DIFF,
+  '13.x': VARS_ARRAY_DIFF,
 };
 
 /** Directives that only exist from a given major on. */
@@ -130,9 +132,38 @@ export function directivesFor(version = DEFAULT_VERSION) {
   return table;
 }
 
-/** The view-data expression for a version. */
-export function varsFor(version = DEFAULT_VERSION) {
-  return VARS_BY_VERSION[normalizeVersion(version)];
+/**
+ * The view-data expression for a version.
+ *
+ * `installed` (an EXACT framework version, e.g. '11.34.2' — readable from
+ * composer.lock, no vendor or boot needed) refines a major table where Laravel
+ * changed bytes mid-major. Verified against tags on raw.githubusercontent:
+ * the include/layout view-data filter switched Arr::except() -> array_diff_key()
+ * in **v11.43.0**, so apps on 11.0-11.42 must emit the Arr::except() form.
+ * Measured consequence without this: 8 of 147 byte failures against a real
+ * Laravel 11.34.2 project (extends + the whole include family).
+ */
+export function varsFor(version = DEFAULT_VERSION, installed = null) {
+  const v = normalizeVersion(version);
+  if (v === '11.x' && installed) {
+    const m = /^(\d+)\.(\d+)/.exec(String(installed).replace(/^v/, ''));
+    if (m && Number(m[1]) === 11 && Number(m[2]) < 43) return VARS_ARR_EXCEPT;
+  }
+  return VARS_BY_VERSION[v];
+}
+
+/**
+ * The exact installed framework version ('11.34.2') from a composer.lock or
+ * composer.json object; null when the lock does not pin one.
+ */
+export function installedVersionFromComposer(composer) {
+  if (!composer || typeof composer !== 'object') return null;
+  const packages = [
+    ...(Array.isArray(composer.packages) ? composer.packages : []),
+    ...(Array.isArray(composer['packages-dev']) ? composer['packages-dev'] : []),
+  ];
+  const framework = packages.find((p) => p && p.name === 'laravel/framework');
+  return framework && framework.version ? String(framework.version).replace(/^v/, '') : null;
 }
 
 /**
@@ -153,4 +184,4 @@ export function versionFromComposer(composer) {
   return null;
 }
 
-export default { VERSIONS, DEFAULT_VERSION, normalizeVersion, directivesFor, varsFor, versionFromComposer };
+export default { VERSIONS, DEFAULT_VERSION, normalizeVersion, directivesFor, varsFor, versionFromComposer, installedVersionFromComposer };

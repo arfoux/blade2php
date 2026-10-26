@@ -187,6 +187,7 @@ framework's `compileString()`.
 | `strict` | `false` | unknown directives throw `BL001` |
 | `componentTags` | `true` | compile `<x-…>` tags |
 | `laravel` | `'13.x'` | the major whose directive set and bytes to emit |
+| `installed` | — | the exact framework version (`'11.34.2'`, read from composer.lock); refines the major where Laravel changed bytes mid-major (the v11.43.0 view-data switch) |
 | `app` | — | a Laravel app root; enables static component discovery |
 | `componentClass` | — | `(name) => string \| {class, params} \| {view} \| null` |
 | `components` | `{}` | options for the default resolver |
@@ -217,7 +218,7 @@ compile(src, { laravel: '10' });   // or '11', '12', '13' (default)
 
 | | 10.x | 11.x | 12.x | 13.x |
 |---|---|---|---|---|
-| view-data filter | `Arr::except(…)` | `array_diff_key(…)` | same | same |
+| view-data filter | `Arr::except(…)` | **< 11.43:** `Arr::except(…)` · **≥ 11.43:** `array_diff_key(…)` (pass `installed`) | same | same |
 | `@props` | `onlyProps`/`exceptProps` | `extractPropNames` | +`unset($__key, $__value)` | same |
 | `@use` | basic | basic | `function`/`const`, group imports | same |
 | `@pushIf` comma handling | limit 2 | limit 2 | split-all | split-all |
@@ -325,8 +326,8 @@ written against. They are reference material, not build inputs.
 
 ## Status
 
-Version `0.1.0`, `private: true` — not published to npm yet. Remove `private`
-(and pick the scope) when publishing.
+Version `0.1.2`, published to npm as `blade2php` (`public` access). Releases are
+tag-driven: pushing `v<version>` publishes through `.github/workflows/ci.yml`.
 
 ## License
 
