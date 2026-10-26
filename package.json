@@ -22,7 +22,7 @@
     "workers",
     "ssr"
   ],
-  "author": "",
+  "author": "arfoux",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -39,6 +39,7 @@
   "files": [
     "src",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "dependencies": {
