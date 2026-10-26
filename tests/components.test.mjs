@@ -172,3 +172,17 @@ test('a non-self-closing component tag never swallows content as attributes', ()
   // stable signal).
   assert.match(out, /withName\('markdown-editor'\)/);
 });
+
+test('raw PHP between attributes leaves the tag byte-identical (oracle: Laravel 11.34.2)', () => {
+  // The real compiler does NOT compile a component tag whose attribute region
+  // holds an unquoted PHP tag — it passes the whole tag through. Compiling it
+  // anyway diverged AND silently dropped the PHP region from the output
+  // (measured against blogkit's own framework with tests/oracle/compile.php).
+  const opts = { componentClass: () => ({ class: 'App\\View\\Components\\Alert', params: ['id'] }) };
+  const cases = [
+    '<x-alert id="x" <?php echo $y; ?> />',
+    '<x-alert id="x" <?php echo 1; ?> title="t" />',
+    '<x-alert id="x" <?= $y ?> />',
+  ];
+  for (const src of cases) assert.equal(compile(src, opts), src, `byte-identical passthrough: ${src}`);
+});

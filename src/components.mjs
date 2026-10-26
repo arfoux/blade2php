@@ -299,6 +299,28 @@ function stripSlotMeta(attrs) {
   return attrs.replace(/\s+name=("[^"]+"|'[^']+'|[^\s>]+)/, '').replace(/\s+:name=("[^"]+"|'[^']+'|[^\s>]+)/, '');
 }
 
+// Oracle-proven on Laravel 11.34.2: a component tag whose attribute region
+// holds a RAW PHP tag (`<?php echo $y; ?>`, `<?= $y ?>`, at any position between
+// attributes) is NOT compiled by Laravel at all — it passes through
+// byte-identical. Compiling it anyway (a) diverges and (b) silently DROPS the
+// PHP region from the output, so both passes treat it as opaque. Quoted
+// `data="<?php … ?>"` stays on the compiling path — the oracle could not
+// answer that form (its helper throws there), so nothing is guessed.
+function hasRawPhpOutsideQuotes(s) {
+  let quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") { quote = c; continue; }
+    if (c === '<' && s[i + 1] === '?') return true;
+  }
+  return false;
+}
+
 function compileSelfClosingTags(value, ctx) {
   // A lazy candidate can run past a NON-self-closing tag
   // (`<x-textarea>…</x-textarea>`) to the first `/>` later in the file and
@@ -330,6 +352,8 @@ function compileSelfClosingTags(value, ctx) {
     }
     return false;
   };
+  // Oracle-proven on Laravel 11.34.2: see hasRawPhpOutsideQuotes() (module
+  // scope — both passes use it).
   let out = '';
   let cursor = 0;
   for (;;) {
@@ -337,6 +361,12 @@ function compileSelfClosingTags(value, ctx) {
     const m = candidate.exec(value);
     if (!m) break;
     const attrs = m[2] || '';
+    if (hasRawPhpOutsideQuotes(attrs)) {
+      // Opaque: emit the whole candidate unchanged (Laravel's bytes).
+      out += m[0];
+      cursor = m.index + m[0].length;
+      continue;
+    }
     if (hasTagTerminator(attrs)) {
       out += value.slice(cursor, m.index + 1);
       cursor = m.index + 1;
@@ -353,9 +383,14 @@ function compileSelfClosingTags(value, ctx) {
 
 function compileOpeningTags(value, ctx) {
   const pattern = /<\s*x[-:]([\w\-:.]+)((?:\s+[\s\S]*?)?)(?<![\/=\-])>/g;
-  return value.replace(pattern, (_full, name, attrs) => {
+  return value.replace(pattern, (full, name, attrs) => {
+    // Raw PHP between attributes makes Laravel leave the whole tag untouched
+    // (oracle, Laravel 11.34.2): match is refused so the literal survives —
+    // without this the opening pass would swallow the `<?php … ?>` region
+    // (its `>` ends the lazy match) and drop it from the output.
+    if (hasRawPhpOutsideQuotes(attrs || '')) return full;
     const boundAttributes = {};
-    const attributes = getAttributesFromAttributeString(ctx.blade, attrs || '', boundAttributes);
+    const attributes = getAttributesFromAttributeString(ctx.blade, attrs, boundAttributes);
     return componentString(name, attributes, boundAttributes, ctx);
   });
 }
