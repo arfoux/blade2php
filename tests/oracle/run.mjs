@@ -95,7 +95,7 @@ rmSync(tmp, { recursive: true, force: true });
 for (const f of failures) {
   console.log(`\nFAIL ${f.id} — ${f.why}`);
   console.log('  laravel: ' + JSON.stringify(f.expected));
-  console.log('  blade2js: ' + JSON.stringify(f.got));
+  console.log('  blade2php: ' + JSON.stringify(f.got));
 }
 
 console.log(`\n${pass} passed, ${fail} failed, ${skip} skipped (Laravel version: ${process.env.LW_LARAVEL ?? 'see oracle'})`);

@@ -193,7 +193,7 @@ for (const f of failures.slice(0, 5)) {
   console.log(`\nFAIL ${f.file} — ${f.why}`);
   console.log('  source:  ' + JSON.stringify(f.src));
   console.log('  laravel: ' + JSON.stringify(f.expected));
-  console.log('  blade2js:' + JSON.stringify(f.got));
+  console.log('  blade2php:' + JSON.stringify(f.got));
 }
 
 console.log(`\nfuzz [${laravel}]: ${pass} passed, ${fail} failed, ${skipped} skipped (n=${n}, seed=${seed})`);

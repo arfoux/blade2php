@@ -1,5 +1,5 @@
 {
-  "name": "blade2js",
+  "name": "blade2php",
   "version": "0.1.0",
   "description": "Laravel's Blade compiler in pure JavaScript: .blade.php -> the exact PHP bytes Illuminate\\View\\Compilers\\BladeCompiler produces. No PHP runtime, no Composer.",
   "scripts": {
@@ -47,7 +47,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/arfoux/blade2js.git"
+    "url": "git+https://github.com/arfoux/blade2php.git"
   },
   "publishConfig": {
     "access": "public"

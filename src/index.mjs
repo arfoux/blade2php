@@ -1,6 +1,6 @@
 // src/index.mjs — the public surface.
 //
-//   import { compile } from 'blade2js';
+//   import { compile } from 'blade2php';
 //   const php = compile(bladeSource, { path: 'welcome.blade.php' });
 //
 // `compile()` answers the same PHP bytes as

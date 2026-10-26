@@ -1,4 +1,4 @@
-# blade2js
+# blade2php
 
 A **Laravel Blade compiler written in JavaScript**. Input: a `.blade.php` template.
 Output: the **exact PHP bytes** `Illuminate\View\Compilers\BladeCompiler` produces.
@@ -6,7 +6,7 @@ Output: the **exact PHP bytes** `Illuminate\View\Compilers\BladeCompiler` produc
 No PHP runtime. No Composer. No `vendor/`. The compiler is the package.
 
 ```js
-import { compile } from 'blade2js';
+import { compile } from 'blade2php';
 
 compile('<h1>{{ $title }}</h1>');
 // '<h1><?php echo e($title); ?></h1>'
@@ -109,7 +109,7 @@ pages. This one is explicit:
 | `BL004` | a `<x-…>` component that cannot be resolved |
 
 ```js
-import { compile, BladeCompileError } from 'blade2js';
+import { compile, BladeCompileError } from 'blade2php';
 
 try {
   compile('@foreach($items)\n@endforeach', { strict: true });
@@ -154,7 +154,7 @@ backslash → class) or `'components.alert'` (no backslash → anonymous view).
 can know:
 
 ```js
-import { createComponentResolver } from 'blade2js/components';
+import { createComponentResolver } from 'blade2php/components';
 
 const componentClass = createComponentResolver({
   namespace: 'App\\',
@@ -266,7 +266,7 @@ A registration whose arguments are not literals is **reported**, not guessed —
 it lands in `discoverComponents(app).unresolved`.
 
 ```js
-import { discoverComponents } from 'blade2js/discovery';
+import { discoverComponents } from 'blade2php/discovery';
 const app = discoverComponents('/path/to/laravel-app');
 app.componentClass('alert');            // { class, params, file }
 app.componentClass('forms.input');      // { class, … } or { view: 'components.forms.input' }
